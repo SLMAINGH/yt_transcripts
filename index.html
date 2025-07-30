@@ -71,23 +71,26 @@
         let allTranscriptsData = [];
 
         /**
-         * A robust native JavaScript CSV parser that handles multi-line fields.
+         * A robust native JavaScript CSV parser.
+         * This handles multi-line fields, quoted fields, and escaped quotes.
          * @param {string} csvText - The raw text from the CSV file.
          * @returns {Array<Object>} An array of objects representing the data.
          */
         function parseCSV(csvText) {
-            const lines = [];
-            let currentLine = [];
+            const rows = [];
+            let currentRow = [];
             let field = '';
             let inQuotes = false;
-            const text = csvText.trim().replace(/\r\n/g, '\n');
+            const text = csvText.trim().replace(/\r/g, ''); // Normalize line endings
 
             for (let i = 0; i < text.length; i++) {
                 const char = text[i];
+                const nextChar = text[i + 1];
+
                 if (inQuotes) {
-                    if (char === '"' && text[i + 1] === '"') {
+                    if (char === '"' && nextChar === '"') { // Escaped quote
                         field += '"';
-                        i++;
+                        i++; // Skip next quote
                     } else if (char === '"') {
                         inQuotes = false;
                     } else {
@@ -97,28 +100,29 @@
                     if (char === '"') {
                         inQuotes = true;
                     } else if (char === ',') {
-                        currentLine.push(field);
+                        currentRow.push(field);
                         field = '';
                     } else if (char === '\n') {
-                        currentLine.push(field);
-                        lines.push(currentLine);
-                        currentLine = [];
+                        currentRow.push(field);
+                        rows.push(currentRow);
+                        currentRow = [];
                         field = '';
                     } else {
                         field += char;
                     }
                 }
             }
-            currentLine.push(field);
-            lines.push(currentLine);
+            // Add the last field and row
+            currentRow.push(field);
+            rows.push(currentRow);
 
-            if (lines.length < 2) return [];
+            if (rows.length < 2) return [];
 
-            const headers = lines.shift().map(h => h.trim());
-            return lines.map(line => {
+            const headers = rows.shift();
+            return rows.filter(row => row.length === headers.length).map(row => {
                 const obj = {};
                 headers.forEach((header, i) => {
-                    obj[header] = line[i] ? line[i].trim() : '';
+                    obj[header.trim()] = row[i] ? row[i].trim() : '';
                 });
                 return obj;
             });
