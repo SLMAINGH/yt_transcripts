@@ -17,7 +17,7 @@
         .red-bg { background-color: #FF0000; }
         .modal-bg { background-color: rgba(10, 10, 10, 0.8); backdrop-filter: blur(5px); }
         .modal-content-bg { background-color: #121212; border: 1px solid #333; }
-        .modal-transcript-content { background-color: #0A0A0A; border: 1px solid #2a2a2a; max-height: 40vh; overflow-y: auto; }
+        .modal-transcript-content { background-color: #0A0A0A; border: 1px solid #2a2a2a; max-height: 40vh; overflow-y: auto; white-space: pre-wrap; }
         .modal-transcript-content::-webkit-scrollbar { width: 8px; }
         .modal-transcript-content::-webkit-scrollbar-track { background: #1A1A1A; }
         .modal-transcript-content::-webkit-scrollbar-thumb { background-color: #FF0000; border-radius: 10px; border: 2px solid #1A1A1A; }
@@ -71,54 +71,57 @@
         let allTranscriptsData = [];
 
         /**
-         * A more robust native JavaScript CSV parser.
-         * This handles quoted fields containing commas and escaped quotes.
+         * A robust native JavaScript CSV parser that handles multi-line fields.
          * @param {string} csvText - The raw text from the CSV file.
          * @returns {Array<Object>} An array of objects representing the data.
          */
         function parseCSV(csvText) {
-            const result = [];
-            // Normalize line endings and split into lines
-            const lines = csvText.trim().replace(/\r\n/g, '\n').split('\n');
-            if (lines.length < 2) return [];
+            const lines = [];
+            let currentLine = [];
+            let field = '';
+            let inQuotes = false;
+            const text = csvText.trim().replace(/\r\n/g, '\n');
 
-            const headers = lines.shift().split(',').map(h => h.trim());
-
-            lines.forEach(line => {
-                if (!line.trim()) return;
-
-                const obj = {};
-                let field = '';
-                let inQuotes = false;
-                let headerIndex = 0;
-
-                for (let i = 0; i < line.length; i++) {
-                    const char = line[i];
-
-                    if (char === '"') {
-                        // If we see a quote, check if it's an escaped quote ("")
-                        if (inQuotes && line[i + 1] === '"') {
-                            field += '"'; // Add a single quote to the field
-                            i++; // And skip the next character
-                        } else {
-                            // Otherwise, it's a regular quote, so toggle the inQuotes state
-                            inQuotes = !inQuotes;
-                        }
-                    } else if (char === ',' && !inQuotes) {
-                        // If we see a comma and we're not inside quotes, this field is done
-                        obj[headers[headerIndex]] = field;
-                        field = '';
-                        headerIndex++;
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                if (inQuotes) {
+                    if (char === '"' && text[i + 1] === '"') {
+                        field += '"';
+                        i++;
+                    } else if (char === '"') {
+                        inQuotes = false;
                     } else {
-                        // Otherwise, add the character to the current field
+                        field += char;
+                    }
+                } else {
+                    if (char === '"') {
+                        inQuotes = true;
+                    } else if (char === ',') {
+                        currentLine.push(field);
+                        field = '';
+                    } else if (char === '\n') {
+                        currentLine.push(field);
+                        lines.push(currentLine);
+                        currentLine = [];
+                        field = '';
+                    } else {
                         field += char;
                     }
                 }
-                // Add the very last field in the line
-                obj[headers[headerIndex]] = field;
-                result.push(obj);
+            }
+            currentLine.push(field);
+            lines.push(currentLine);
+
+            if (lines.length < 2) return [];
+
+            const headers = lines.shift().map(h => h.trim());
+            return lines.map(line => {
+                const obj = {};
+                headers.forEach((header, i) => {
+                    obj[header] = line[i] ? line[i].trim() : '';
+                });
+                return obj;
             });
-            return result;
         }
 
         /**
@@ -188,7 +191,8 @@
                 } else if (colName === 'youtube_link') {
                      modalDetails.innerHTML += `<div class="pt-4"><a href="${value}" target="_blank" class="inline-block red-bg text-white font-semibold py-2 px-6 rounded-lg hover:opacity-90 transition-opacity">Watch on YouTube</a></div>`;
                 } else {
-                    modalDetails.innerHTML += `<div><h4 class="text-lg font-semibold capitalize">${formattedColName}</h4><p class="text-gray-300">${value}</p></div>`;
+                    // Use pre-wrap to preserve newlines in fields like key_information
+                    modalDetails.innerHTML += `<div><h4 class="text-lg font-semibold capitalize">${formattedColName}</h4><p class="text-gray-300 whitespace-pre-wrap">${value}</p></div>`;
                 }
             });
 
