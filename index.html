@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Transcript Viewer</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/papaparse/5.3.2/papaparse.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -38,7 +37,6 @@
         <div class="container mx-auto">
             <h2 class="text-3xl font-bold mb-8 text-center">Video Transcript Documents</h2>
             <div id="transcript-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                <!-- Loading state -->
                 <div id="loading-state" class="col-span-full flex flex-col items-center justify-center h-64">
                     <div class="loader mb-4"></div>
                     <p class="text-gray-400">Loading transcripts from data.csv...</p>
@@ -52,22 +50,14 @@
             <button id="close-modal" class="absolute top-4 right-4 text-gray-400 hover:text-white transition-colors">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
             </button>
-            <div id="modal-details" class="space-y-4">
-                <!-- Modal content will be injected here -->
-            </div>
+            <div id="modal-details" class="space-y-4"></div>
         </div>
     </div>
 
     <script>
         // --- CONFIGURATION ---
-        // Define which columns from your CSV to show on the main cards.
-        // The first column will be the main title.
         const cardViewColumns = ['title', 'upload_date', 'summary'];
-
-        // Define which columns to show in the detailed modal view.
         const modalViewColumns = ['title', 'upload_date', 'youtube_link', 'summary', 'transcript'];
-        
-        // This must be the name of the column that contains the full transcript.
         const transcriptColumnName = 'transcript';
 
         // --- DOM ELEMENTS ---
@@ -78,31 +68,61 @@
         const closeModalBtn = document.getElementById('close-modal');
         const modalDetails = document.getElementById('modal-details');
 
-        let allTranscriptsData = []; // To store the parsed CSV data
+        let allTranscriptsData = [];
 
         /**
-         * Fetches and parses the CSV file.
+         * A native JavaScript CSV parser.
+         * Handles quoted fields containing commas.
+         * @param {string} csvText - The raw text from the CSV file.
+         * @returns {Array<Object>} An array of objects representing the data.
          */
-        function loadData() {
-            Papa.parse('data.csv', {
-                download: true,
-                header: true,
-                skipEmptyLines: true,
-                complete: (results) => {
-                    allTranscriptsData = results.data;
-                    displayTranscripts();
-                },
-                error: (error) => {
-                    loadingState.innerHTML = `<p class="text-red-500">Error loading data.csv: ${error.message}. Make sure the file exists in the same directory.</p>`;
+        function parseCSV(csvText) {
+            const lines = csvText.trim().split('\n');
+            const headers = lines.shift().split(',').map(h => h.trim());
+            
+            return lines.map(line => {
+                const values = [];
+                // This regex handles commas inside of quoted strings
+                const matches = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
+                
+                for (const match of matches) {
+                    let value = match.trim();
+                    if (value.startsWith('"') && value.endsWith('"')) {
+                        value = value.slice(1, -1).replace(/""/g, '"');
+                    }
+                    values.push(value);
                 }
+                
+                const obj = {};
+                for (let i = 0; i < headers.length; i++) {
+                    obj[headers[i]] = values[i];
+                }
+                return obj;
             });
+        }
+
+        /**
+         * Fetches and processes the CSV data using native browser APIs.
+         */
+        async function loadData() {
+            try {
+                const response = await fetch('data.csv');
+                if (!response.ok) {
+                    throw new Error(`Network response was not ok: ${response.statusText}`);
+                }
+                const csvText = await response.text();
+                allTranscriptsData = parseCSV(csvText);
+                displayTranscripts();
+            } catch (error) {
+                loadingState.innerHTML = `<p class="text-red-500">Error loading data.csv: ${error.message}. Make sure the file exists and is accessible.</p>`;
+            }
         }
 
         /**
          * Creates and displays a card for each transcript entry.
          */
         function displayTranscripts() {
-            grid.innerHTML = ''; // Clear loading state
+            grid.innerHTML = ''; 
             if (allTranscriptsData.length === 0) {
                  grid.innerHTML = `<p class="col-span-full text-center text-gray-400">No data found in data.csv.</p>`;
                  return;
@@ -114,22 +134,17 @@
                 card.dataset.index = index;
 
                 let cardHTML = '<div>';
-                // Use the first column from cardViewColumns as the main title
                 const titleCol = cardViewColumns[0];
                 cardHTML += `<h3 class="text-xl font-bold mb-2">${item[titleCol] || 'No Title'}</h3>`;
 
-                // Add the rest of the card columns as descriptions
                 for (let i = 1; i < cardViewColumns.length; i++) {
                     const colName = cardViewColumns[i];
                     const value = item[colName] || 'N/A';
-                    cardHTML += `<p class="text-sm text-gray-400 mb-2 capitalize">${colName.replace(/_/g, ' ')}: ${value.substring(0, 100)}${value.length > 100 ? '...' : ''}</p>`;
+                    const cleanValue = value.length > 100 ? value.substring(0, 100) + '...' : value;
+                    cardHTML += `<p class="text-sm text-gray-400 mb-2 capitalize">${colName.replace(/_/g, ' ')}: ${cleanValue}</p>`;
                 }
                 cardHTML += '</div>';
-                cardHTML += `
-                    <div class="mt-4 text-right">
-                        <span class="text-sm font-semibold red-accent">View Details &rarr;</span>
-                    </div>
-                `;
+                cardHTML += `<div class="mt-4 text-right"><span class="text-sm font-semibold red-accent">View Details →</span></div>`;
 
                 card.innerHTML = cardHTML;
                 card.addEventListener('click', () => openModal(index));
@@ -142,52 +157,30 @@
          */
         function openModal(index) {
             const item = allTranscriptsData[index];
-            modalDetails.innerHTML = ''; // Clear previous content
+            modalDetails.innerHTML = '';
 
             modalViewColumns.forEach(colName => {
                 const value = item[colName] || 'N/A';
                 const formattedColName = colName.replace(/_/g, ' ');
 
                 if (colName === transcriptColumnName) {
-                    modalDetails.innerHTML += `
-                        <div class="pt-2">
-                            <h4 class="text-lg font-semibold capitalize mb-2">${formattedColName}</h4>
-                            <div class="modal-transcript-content p-4 rounded-md text-gray-300 leading-relaxed">
-                                ${value.replace(/(\[\d\d:\d\d\])/g, '<br><br><span class="red-accent font-semibold">$1</span>').trim()}
-                            </div>
-                        </div>`;
+                    modalDetails.innerHTML += `<div class="pt-2"><h4 class="text-lg font-semibold capitalize mb-2">${formattedColName}</h4><div class="modal-transcript-content p-4 rounded-md text-gray-300 leading-relaxed">${value.replace(/(\[\d\d:\d\d\])/g, '<br><br><span class="red-accent font-semibold">$1</span>').trim()}</div></div>`;
                 } else if (colName === 'youtube_link') {
-                     modalDetails.innerHTML += `
-                        <div class="pt-4">
-                             <a href="${value}" target="_blank" class="inline-block red-bg text-white font-semibold py-2 px-6 rounded-lg hover:opacity-90 transition-opacity">
-                                Watch on YouTube
-                            </a>
-                        </div>`;
-                } 
-                else {
-                    modalDetails.innerHTML += `
-                        <div>
-                            <h4 class="text-lg font-semibold capitalize">${formattedColName}</h4>
-                            <p class="text-gray-300">${value}</p>
-                        </div>`;
+                     modalDetails.innerHTML += `<div class="pt-4"><a href="${value}" target="_blank" class="inline-block red-bg text-white font-semibold py-2 px-6 rounded-lg hover:opacity-90 transition-opacity">Watch on YouTube</a></div>`;
+                } else {
+                    modalDetails.innerHTML += `<div><h4 class="text-lg font-semibold capitalize">${formattedColName}</h4><p class="text-gray-300">${value}</p></div>`;
                 }
             });
 
             modal.classList.remove('hidden');
             modal.classList.add('flex');
-            setTimeout(() => {
-                modalContent.classList.remove('scale-95', 'opacity-0');
-                modalContent.classList.add('scale-100', 'opacity-100');
-            }, 50);
+            setTimeout(() => { modalContent.classList.remove('scale-95', 'opacity-0'); modalContent.classList.add('scale-100', 'opacity-100'); }, 50);
         }
 
         function closeModal() {
             modalContent.classList.add('scale-95', 'opacity-0');
             modalContent.classList.remove('scale-100', 'opacity-100');
-            setTimeout(() => {
-                 modal.classList.add('hidden');
-                 modal.classList.remove('flex');
-            }, 300);
+            setTimeout(() => { modal.classList.add('hidden'); modal.classList.remove('flex'); }, 300);
         }
 
         // --- EVENT LISTENERS & INITIALIZATION ---
