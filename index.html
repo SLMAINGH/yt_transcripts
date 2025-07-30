@@ -168,7 +168,8 @@
 
             allTranscriptsData.forEach((item, index) => {
                 const card = document.createElement('div');
-                card.className = 'card-bg rounded-lg p-6 cursor-pointer flex flex-col justify-between';
+                // Added h-full to make cards in the same row stretch to the same height
+                card.className = 'card-bg rounded-lg p-6 cursor-pointer flex flex-col justify-between h-full';
                 card.dataset.index = index;
 
                 let cardHTML = '<div>';
@@ -178,8 +179,8 @@
                 for (let i = 1; i < cardViewColumns.length; i++) {
                     const colName = cardViewColumns[i];
                     const value = item[colName] || 'N/A';
-                    const cleanValue = value.length > 100 ? value.substring(0, 100) + '...' : value;
-                    cardHTML += `<p class="text-sm text-gray-400 mb-2 capitalize">${colName.replace(/_/g, ' ')}: ${cleanValue}</p>`;
+                    // Removed truncation to show full text and added whitespace-pre-wrap
+                    cardHTML += `<p class="text-sm text-gray-300 mb-2 capitalize whitespace-pre-wrap">${colName.replace(/_/g, ' ')}: ${value}</p>`;
                 }
                 cardHTML += '</div>';
                 cardHTML += `<div class="mt-4 text-right"><span class="text-sm font-semibold red-accent">View Details →</span></div>`;
