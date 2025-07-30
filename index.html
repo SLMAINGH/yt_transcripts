@@ -57,7 +57,7 @@
     <script>
         // --- CONFIGURATION ---
         const cardViewColumns = ['title', 'upload_date', 'description'];
-        const modalViewColumns = ['title', 'upload_date', 'youtube_link', 'description', 'key_informatio', 'transcript'];
+        const modalViewColumns = ['title', 'upload_date', 'youtube_link', 'description', 'key_information', 'transcript'];
         const transcriptColumnName = 'transcript';
 
         // --- DOM ELEMENTS ---
@@ -71,34 +71,54 @@
         let allTranscriptsData = [];
 
         /**
-         * A native JavaScript CSV parser.
-         * Handles quoted fields containing commas.
+         * A more robust native JavaScript CSV parser.
+         * This handles quoted fields containing commas and escaped quotes.
          * @param {string} csvText - The raw text from the CSV file.
          * @returns {Array<Object>} An array of objects representing the data.
          */
         function parseCSV(csvText) {
-            const lines = csvText.trim().split('\n');
+            const result = [];
+            // Normalize line endings and split into lines
+            const lines = csvText.trim().replace(/\r\n/g, '\n').split('\n');
+            if (lines.length < 2) return [];
+
             const headers = lines.shift().split(',').map(h => h.trim());
-            
-            return lines.map(line => {
-                const values = [];
-                // This regex handles commas inside of quoted strings
-                const matches = line.match(/(".*?"|[^",]+)(?=\s*,|\s*$)/g) || [];
-                
-                for (const match of matches) {
-                    let value = match.trim();
-                    if (value.startsWith('"') && value.endsWith('"')) {
-                        value = value.slice(1, -1).replace(/""/g, '"');
-                    }
-                    values.push(value);
-                }
-                
+
+            lines.forEach(line => {
+                if (!line.trim()) return;
+
                 const obj = {};
-                for (let i = 0; i < headers.length; i++) {
-                    obj[headers[i]] = values[i];
+                let field = '';
+                let inQuotes = false;
+                let headerIndex = 0;
+
+                for (let i = 0; i < line.length; i++) {
+                    const char = line[i];
+
+                    if (char === '"') {
+                        // If we see a quote, check if it's an escaped quote ("")
+                        if (inQuotes && line[i + 1] === '"') {
+                            field += '"'; // Add a single quote to the field
+                            i++; // And skip the next character
+                        } else {
+                            // Otherwise, it's a regular quote, so toggle the inQuotes state
+                            inQuotes = !inQuotes;
+                        }
+                    } else if (char === ',' && !inQuotes) {
+                        // If we see a comma and we're not inside quotes, this field is done
+                        obj[headers[headerIndex]] = field;
+                        field = '';
+                        headerIndex++;
+                    } else {
+                        // Otherwise, add the character to the current field
+                        field += char;
+                    }
                 }
-                return obj;
+                // Add the very last field in the line
+                obj[headers[headerIndex]] = field;
+                result.push(obj);
             });
+            return result;
         }
 
         /**
